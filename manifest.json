@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "TabShield",
+    "version": "0.0.0",
+
+    "default_locale": "en",
+    "description": "Extension to protect chrome tabs against different type of attacks",
+  
+    "author": "Pratik Kayastha",
+    "background": {
+      "service_worker": "background.js"
+    },
+    "cross_origin_embedder_policy": {"value": "require-corp"},
+    "cross_origin_opener_policy": {"value": "same-origin"},
+    "permissions": ["tabs"]
+  }
