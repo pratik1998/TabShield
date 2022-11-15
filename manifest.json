@@ -3,14 +3,37 @@
     "name": "TabShield",
     "version": "0.0.0",
 
-    "default_locale": "en",
     "description": "Extension to protect chrome tabs against different type of attacks",
   
     "author": "Pratik Kayastha",
     "background": {
-      "service_worker": "background.js"
+        "service_worker": "background.js",
+        "type": "module"
     },
-    "cross_origin_embedder_policy": {"value": "require-corp"},
-    "cross_origin_opener_policy": {"value": "same-origin"},
-    "permissions": ["tabs"]
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+    "icons": {
+        "16": "icons/icons8-shield-64.png",
+        "32": "icons/icons8-shield-64.png",
+        "48": "icons/icons8-shield-64.png",
+        "128": "icons/icons8-shield-64.png"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "icons/icons8-shield-64.png"
+    },
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "<all_urls>"
+    ]
   }
