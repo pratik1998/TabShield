@@ -1,5 +1,3 @@
-let previousTabId = -1;
-let previousWindowId = -1;
 let currentTabId = -1;
 let currentWindowId = -1;
 
@@ -14,31 +12,39 @@ async function getCurrentTab() {
 
 async function takeScreenshot() {
     let dataUrl = await takeCurrentTabScreenshot();
+    if(!dataUrl) {
+        console.log("No screenshot taken :("); // Mainly because of the limitation of chrome API
+        return;
+    }
     tabIDToScreenshot.set(currentTabId, dataUrl);
 }
 
+// Please note that this function has limitation that if MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND is exceeded
+// then it will not be able to take screenshot of the tab
+// The limitation is imposed by chrome API and can not be avoided because if we try to delay the call then
+// the tab will be switched and we will not be able to take screenshot of the tab and that will be a problem
+// as we need to store screenshot with tabId
+// https://developer.chrome.com/extensions/tabs#method-captureVisibleTab
 async function takeCurrentTabScreenshot() {
     if (currentTabId !== -1 && currentWindowId !== -1) {
-        console.log('Taking screenshot of tab: ', currentTabId, 'and window:', currentWindowId);
         try {
             const dataUrl = await chrome.tabs.captureVisibleTab(currentWindowId, { format: "png" });
             return dataUrl;
         } catch (error) {
-            console.log('Error while taking screenshot: ', error.message);
-            if(error.message === "This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota.") {
-                // Wait for 1 second to reset the quota
-                setTimeout(async () => {
-                    return await takeCurrentTabScreenshot();
-                }, 1000);
-            }
+            // This error can be thrown if
+            // 1. The tab is not visible (e.g. extension tab, devtools tab or tab with empty URL)
+            // 2. MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota is exceeded
+            return;
         }
     }
 }
 
+// Monitor tab changes and take screenshot of the tab periodically
+// Deciding the frequency of taking screenshot is a tradeoff between accuracy and correctness
 async function monitorTabs() {
     setInterval(async () => {
         await takeScreenshot();
-    }, 10 * 1000);
+    }, 3 * 1000);
 }
 
 async function init() {
@@ -48,27 +54,7 @@ async function init() {
     monitorTabs();
 }
 
-// Display diff image to user
-function setBackgroundImage(imgData) {
-    var backgroundImgEle = document.createElement('div');
-    backgroundImgEle.id = "backgroundImgEle";
-    backgroundImgEle.style.width = "100%";
-    backgroundImgEle.style.height = "100%";
-    backgroundImgEle.style.top = "0px";
-    backgroundImgEle.style.left = "0px";
-    backgroundImgEle.style.backgroundImage = "url(" + imgData + ")";
-    backgroundImgEle.style.backgroundSize = "100% 100%"
-    backgroundImgEle.style.position = "fixed";
-    backgroundImgEle.addEventListener("click", function() {
-        // Remove the background image
-        var temp = document.getElementById('backgroundImgEle')
-            temp.parentNode.removeChild(temp);
-    });
-    document.body.appendChild(backgroundImgEle);
-}
-
 async function updateTabInfo(activeInfo) {
-    previousTabId = currentTabId;
     currentTabId = activeInfo.tabId;
     currentWindowId = activeInfo.windowId;
     const latestScreenshot = await takeCurrentTabScreenshot();
@@ -78,6 +64,11 @@ async function updateTabInfo(activeInfo) {
     if(!previousScreenshot) {
         console.log("No previous screenshot found");
         tabIDToScreenshot.set(currentTabId, latestScreenshot);
+        return;
+    }
+
+    if(!latestScreenshot) {
+        console.log("No latest screenshot taken:(");
         return;
     }
 
@@ -91,14 +82,14 @@ async function updateTabInfo(activeInfo) {
         }
     };
 
-    chrome.tabs.sendMessage(currentTabId, updateBackgroundImageMsg);
+    try {
+        chrome.tabs.sendMessage(currentTabId, updateBackgroundImageMsg);
+    } catch (error) {
+        console.log('Error while sending message to tab: ', error.message);
+    }
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log("In Background Received message: ", request);
-    console.log(sender.tab ?
-        "from a content script:" + sender.tab :
-        "from the extension");
     // Update the extension icon
     if(request.message === "showErrorIcon") {
         const iconData = {
@@ -126,7 +117,6 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 // This is to avoid memory leak and memory exhaustion
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     if (tabIDToScreenshot.has(tabId)) {
-        console.log("Tab screenshot removed: ", tabId);
         tabIDToScreenshot.delete(tabId);
     }
 });

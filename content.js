@@ -1,9 +1,14 @@
 // This threshold is used to determine if the tabnabbing attack is detected
-// The paper suggests that 0.05 is a good enough threshold for 78% sites and 0.4 for 97% sites
-// We are using 0.15 as a threshold for now
-const THRESHOLD_DIFF_PERCENTAGE = 0.15;
+// The paper suggests that 5% is a good enough threshold for 78% sites and 40% for 97% sites
+// But from our experiments, I found that using resemblejs, 5% is also too high to detect changes in the tab
+// So I have set it to 1% for now, ideally it should be decided based on more data points
+const THRESHOLD_DIFF_PERCENTAGE = 1;
+let tabPercentage = 0;
 
 function onCompletePromisify(data) {
+    if (!data) {
+        return Promise.reject(new Error('No data'));
+    }
     return new Promise((resolve, reject) => {
         data.onComplete((data) => {
             resolve(data);
@@ -12,11 +17,25 @@ function onCompletePromisify(data) {
 };
 
 async function getDiffV2(image1, image2) {
+    // Update resemblejs output options
+    resemble.outputSettings({
+        errorColor: {
+            red: 255,
+            green: 0,
+            blue: 0,
+        },
+        errorType: "movement",
+        transparency: 0.3,
+        largeImageThreshold: 1200,
+        useCrossOrigin: false,
+        outputDiff: true
+    });
+
     const data = await onCompletePromisify(resemble(image1).compareTo(image2));
-    console.log("On Complete Data:", data);
     return data;
 }
 
+// Display the diff to the user
 function setBackgroundImage(imgData) {
     var backgroundImgEle = document.createElement('div');
     backgroundImgEle.id = "backgroundImgEle";
@@ -43,15 +62,14 @@ function changePercentage(percentage) {
         color = 'orange';
     document.getElementById("percentage-circle").className = `c100 p${percentage} small ${color}`;
     document.getElementById("percentage-value").textContent = `${percentage}%`;
-    console.log("Percentage:", `c100 p${percentage} small ${color}`, `${percentage}%`);
 }
 
 async function checkForDiff(data) {
     let iconData = {
         message: "showSuccessIcon",
     }
-    if(data.misMatchPercentage > THRESHOLD_DIFF_PERCENTAGE) {
-        console.log("Tabnabbing attack detected");
+    tabPercentage = data.misMatchPercentage;
+    if(data.misMatchPercentage > THRESHOLD_DIFF_PERCENTAGE) { // Tabnabbing detected
         // Set the background image
         setBackgroundImage(data.getImageDataUrl());
         
@@ -61,25 +79,23 @@ async function checkForDiff(data) {
         }
     }
     chrome.runtime.sendMessage(iconData);
-    // chrome.storage.sync.set({ "diffPercentage": data.misMatchPercentage });
-    // console.log("Diff Percentage:", data.misMatchPercentage);
-    // chrome.storage.sync.get("diffPercentage", (data) => {
-    //     console.log("Stored Diff Percentage:", data);
-    // });
-    var port = chrome.runtime.connect({name: "popup"});
-    port.postMessage({ message: "updatePercentage", percentage: data.misMatchPercentage });
 }
 
 // Event listener to add diff image to webpage
 chrome.runtime.onMessage.addListener(async function (request, sender, sendResponse) {
-    console.log('Sender Tab:', sender);
-    console.log('Request:', request);
-    if(request.message == "updateImage") {
+    if(request.message === "updateImage") {
         const image1 = request.data.image1;
         const image2 = request.data.image2;
         const data = await getDiffV2(image1, image2);
-        console.log("Diff Data:", data);
-        await checkForDiff(data);
-        sendResponse({ message: "Updated Image: success"});
+        if (data === "No data") {
+            console.log("Error getting diff data");
+            sendResponse({ message: "error in updating image" });
+            return;
+        } else {
+            await checkForDiff(data);
+            sendResponse({ message: "Updated Image: success"});
+        }
+    } else if (request.message === "getDiffPercentage") {
+        sendResponse({ percentage: tabPercentage });
     }
 });

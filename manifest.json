@@ -33,8 +33,6 @@
         "<all_urls>"
     ],
     "permissions": [
-        "activeTab",
-        "tabs",
-        "storage"
+        "activeTab"
     ]
   }

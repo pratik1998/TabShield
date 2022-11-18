@@ -1,3 +1,10 @@
+async function getCurrentTab() {
+    let queryOptions = { active: true, currentWindow: true };
+    let [tab] = await chrome.tabs.query(queryOptions);
+    return tab;
+}
+
+// Shows the diff percentage in the popup
 function changePercentage(percentage) {
     if (!percentage) {
         percentage = 0;
@@ -10,11 +17,13 @@ function changePercentage(percentage) {
         color = 'orange';
     document.getElementById("percentage-circle").className = `c100 p${percentage} small ${color}`;
     document.getElementById("percentage-value").textContent = `${percentage}%`;
-    console.log("Percentage:", `c100 p${percentage} small ${color}`, `${percentage}%`);
 }
 
-chrome.runtime.onConnect.addListener(function(port) {
-    port.onMessage.addListener(function(msg) {
-        console.log("Message received in popup.js:", msg);
+async function getDiffPercentage() {
+    const tab = await getCurrentTab();
+    chrome.tabs.sendMessage(tab.id, { message: "getDiffPercentage" }, (response) => {
+        changePercentage(response.percentage);
     });
-});
+}
+
+getDiffPercentage();

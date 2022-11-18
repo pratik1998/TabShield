@@ -2,7 +2,13 @@
 <html>
  <body>
   <script>
-  window.opener.location = "http://127.0.0.1:9090/malicious_redir.html";
+    // Adding some delay to make sure the user loses focus
+    setTimeout(function() {
+      window.location = "https://www.google.com";
+    }, 5000);
   </script>
+  <h1>
+    Webpage containing some interesting content to hold the user's attention.
+  </h1>
  </body>
 </html>
